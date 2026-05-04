@@ -1,0 +1,11 @@
+Anki 24.06.3 (d678e393)  (ao)
+Python 3.9.18 Qt 5.15.2 PyQt 5.15.5
+Platform: Windows-10-10.0.26200
+
+When loading capitalize:
+Traceback (most recent call last):
+  File "aqt.addons", line 247, in loadAddons
+  File "C:\Users\Dragos\AppData\Roaming\Anki2\addons21\capitalize\__init__.py", line 139, in <module>
+    Browser.setupMenus = wrap(Browser.setupMenus, on_browser_will_show_context_menu, "after")
+NameError: name 'wrap' is not defined
+
