@@ -20,6 +20,17 @@ def capitalize_first_letter(text: str) -> str:
     i = m.start()
     return text[:i] + text[i].upper() + text[i+1:]
 
+# New: uncapitalize (opposite) implementations
+def uncapitalize_all_words(text: str) -> str:
+    return re.sub(r"\w[\w'\-]*", lambda m: m.group(0).lower(), text, flags=re.UNICODE)
+
+def uncapitalize_first_letter(text: str) -> str:
+    m = re.search(r"\w", text, flags=re.UNICODE)
+    if not m:
+        return text
+    i = m.start()
+    return text[:i] + text[i].lower() + text[i+1:]
+
 class FieldModeDialog(QDialog):
     def __init__(self, parent, field_names):
         super().__init__(parent)
@@ -132,11 +143,85 @@ def run_capitalize_from_browser(browser):
 
     showInfo(f"Updated {changed} notes (fields changed).")
 
-# Add the action to the Browser's Edit menu
+# New: run uncapitalize
+def run_uncapitalize_from_browser(browser):
+    if not hasattr(browser, "selectedNotes"):
+        showInfo("Please open the Browser and select one or more notes.")
+        return
+
+    note_ids = browser.selectedNotes()
+    if not note_ids:
+        showInfo("No notes selected. Select notes in the Browser first.")
+        return
+
+    names = set()
+    for nid in note_ids:
+        try:
+            n = mw.col.getNote(nid)
+            model_fields = [f["name"] for f in n.model()["flds"]]
+            names.update(model_fields)
+        except Exception:
+            continue
+
+    if not names:
+        showInfo("No fields found on selected notes.")
+        return
+
+    dlg = FieldModeDialog(browser, names)
+    if not dlg.exec_():
+        return
+
+    field_modes = dlg.selected_field_modes()
+    if not field_modes:
+        showInfo("No fields selected.")
+        return
+
+    changed = 0
+    mw.progress.start(parent=browser, label="Un-capitalizing fields...", immediate=True)
+    try:
+        for nid in note_ids:
+            note = mw.col.getNote(nid)
+            model_fields = [f["name"] for f in note.model()["flds"]]
+            updated = False
+            for fname, mode in field_modes.items():
+                if fname not in model_fields:
+                    continue
+                idx = model_fields.index(fname)
+                old = note.fields[idx] or ""
+                if mode == 0:
+                    new = uncapitalize_all_words(old)
+                else:
+                    new = uncapitalize_first_letter(old)
+                if new != old:
+                    note.fields[idx] = new
+                    updated = True
+            if updated:
+                mw.col.update_note(note)
+                changed += 1
+    finally:
+        mw.progress.finish()
+    
+    if changed:
+        mw.checkpoint("Uncapitalize fields")
+
+    try:
+        browser.onSearch()
+    except Exception:
+        pass
+
+    showInfo(f"Updated {changed} notes (fields changed).")
+
+# Add the actions to the Browser's Edit menu
 def on_browser_will_show_context_menu(browser):
-    action = QAction("Capitalize Fields...", browser)
-    action.triggered.connect(lambda: run_capitalize_from_browser(browser))
-    browser.form.menuEdit.addAction(action)
+    # Add capitalize action first
+    cap_action = QAction("Capitalize Fields...", browser)
+    cap_action.triggered.connect(lambda: run_capitalize_from_browser(browser))
+    browser.form.menuEdit.addAction(cap_action)
+
+    # then add uncapitalize action directly below it
+    uncap_action = QAction("Uncapitalize Fields...", browser)
+    uncap_action.triggered.connect(lambda: run_uncapitalize_from_browser(browser))
+    browser.form.menuEdit.addAction(uncap_action)
 
 # Hook into the Browser
 Browser.setupMenus = wrap(Browser.setupMenus, on_browser_will_show_context_menu, "after")
